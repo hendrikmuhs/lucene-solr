@@ -44,7 +44,7 @@ public class SparseArrayPersistence implements Closeable {
 	public SparseArrayPersistence(int memoryLimit, Path temporaryPath) throws IOException {
 		this.temporaryPath = temporaryPath;
 
-		bufferSize = (int) (memoryLimit / 2); // 2 == sizeof(short)
+		bufferSize = (int) (memoryLimit / 3); // 3 == sizeof(char) + sizeof(short)
 
 		// align it to 16bit (for fast memcpy)
 		bufferSize += 16 - (bufferSize % 16);
@@ -98,22 +98,23 @@ public class SparseArrayPersistence implements Closeable {
 			return;
 		}
 
-		labelsExtern.GetAddressAsByteBuffer(offset).put(transitionId);
-		transitionsExtern.GetAddressAsShortBuffer(offset).put(transitionPointer);
+		labelsExtern.getAddressAsByteBuffer(offset).put(transitionId);
+		transitionsExtern.getAddressAsByteBuffer(offset * 2).asShortBuffer().put(transitionPointer);
 	}
 
 	public int readTransitionLabel(int offset) {
 		if (offset >= inMemoryBufferOffset) {
 			return labels[offset - inMemoryBufferOffset];
 		}
-		return labelsExtern.GetAddressAsByteBuffer(offset).get();
+		return labelsExtern.getAddressAsByteBuffer(offset).get();
 	}
 
 	public short readTransitionValue(int offset) {
 		if (offset >= inMemoryBufferOffset) {
 			return transitions[offset - inMemoryBufferOffset];
 		}
-		return transitionsExtern.GetAddressAsShortBuffer(offset).get();
+		
+		return transitionsExtern.getAddressAsByteBuffer(offset * 2).asShortBuffer().get();
 	}
 
 	public int resolveTransitionValue(int offset, int value) {
@@ -130,28 +131,25 @@ public class SparseArrayPersistence implements Closeable {
 		if ((pt & 0x8000) > 0) {
 			// clear the first bit
 			pt &= 0x7FFF;
-			int overflow_bucket = (pt >> 4) + offset - 512;
+			int overflow_bucket = (pt >> 4) + offset - KeyviConstants.COMPACT_SIZE_WINDOW;
 
 			if (overflow_bucket >= inMemoryBufferOffset) {
 				resolved_ptr = (int) VInt.decodeVarShort(transitions, overflow_bucket - inMemoryBufferOffset);
 
 			} else {
-				if (transitionsExtern.getAddressQuickTestOk(overflow_bucket * 2, 5)) {
-					ShortBuffer buffer = transitionsExtern.GetAddressAsShortBuffer(overflow_bucket * 2);
+	      // value needs to be read from external storage, which in 99.9% is a trivial access to the mmap'ed area
+	      // but in rare cases might be spread across 2 chunks, for the chunk border test we assume worst case 3 varshorts
+	      // to be read, that is a maximum of 2**45, so together with shifting 2**48 == 256 TB of addressable space
+				if (transitionsExtern.getAddressQuickTestOk(overflow_bucket * 2, 3 * 2)) {
+					ShortBuffer buffer = transitionsExtern.getAddressAsByteBuffer(overflow_bucket * 2).asShortBuffer();
 
 					resolved_ptr = (int) VInt.decodeVarShort(buffer);
 				} else {
 					// value might be on the chunk border, take a secure approach
-					ShortBuffer buffer = transitionsExtern
-							.GetShortBuffer((offset + KeyviConstants.FINAL_OFFSET_TRANSITION) * 2, 20);
+          ShortBuffer buffer = transitionsExtern
+              .getBuffer(overflow_bucket * 2, 3 * 2).asShortBuffer();
 
 					resolved_ptr = (int) VInt.decodeVarShort(buffer);
-					// uint16_t buffer[10];
-					// transitions_extern_->GetBuffer((offset + FINAL_OFFSET_TRANSITION) *
-					// sizeof(uint16_t), buffer,
-					// 10 * sizeof(uint16_t));
-
-					// resolved_ptr = keyvi::util::decodeVarshort(buffer);
 				}
 			}
 
@@ -159,11 +157,11 @@ public class SparseArrayPersistence implements Closeable {
 
 			if ((pt & 0x8) > 0) {
 				// relative coding
-				resolved_ptr = offset - resolved_ptr + 512;
+				resolved_ptr = offset - resolved_ptr + KeyviConstants.COMPACT_SIZE_WINDOW;
 			}
 
 		} else {
-			resolved_ptr = offset - pt + 512;
+			resolved_ptr = offset - pt + KeyviConstants.COMPACT_SIZE_WINDOW;
 		}
 
 		return resolved_ptr;
@@ -178,16 +176,21 @@ public class SparseArrayPersistence implements Closeable {
 
 		if (transitionsExtern.getAddressQuickTestOk((offset + KeyviConstants.FINAL_OFFSET_TRANSITION) * 2, 5)) {
 			ShortBuffer buffer = transitionsExtern
-					.GetAddressAsShortBuffer((offset + KeyviConstants.FINAL_OFFSET_TRANSITION) * 2);
+          .getAddressAsByteBuffer((offset + KeyviConstants.FINAL_OFFSET_TRANSITION) * 2).asShortBuffer();
 
 			return (int) VInt.decodeVarShort(buffer);
 		}
 
 		// value might be on the chunk border, take a secure approach
-		ShortBuffer buffer = transitionsExtern.GetShortBuffer((offset + KeyviConstants.FINAL_OFFSET_TRANSITION) * 2,
-				20);
+		ShortBuffer buffer = transitionsExtern.getBuffer((offset + KeyviConstants.FINAL_OFFSET_TRANSITION) * 2,
+        20).asShortBuffer();
 
+		
 		return (int) VInt.decodeVarShort(buffer);
+	}
+	
+	public int GetChunkSizeExternalTransitions() {
+	  return transitionsExtern.getChunkSize();
 	}
 
 	/**

@@ -56,69 +56,39 @@ public class MemoryMapManager implements Closeable {
 		return (length <= (chunkSize - chunkOffset));
 	}
 
-	public ByteBuffer GetAddressAsByteBuffer(int offset) {
+	public ByteBuffer getAddressAsByteBuffer(int offset) {
 		int chunkNumber = offset / chunkSize;
 		int chunkOffset = offset % chunkSize;
 
-		ByteBuffer buffer = GetChunkAsByteBuffer(chunkNumber);
+		ByteBuffer buffer = getChunkAsByteBuffer(chunkNumber);
 		buffer.position(chunkOffset);
 
 		return buffer;
 	}
 
-	public ShortBuffer GetAddressAsShortBuffer(int offset) {
-		int chunkNumber = offset / chunkSize;
-		int chunkOffset = offset % chunkSize;
-
-		ShortBuffer buffer = GetChunkAsShortBuffer(chunkNumber);
-		buffer.position(chunkOffset);
-
-		return buffer;
-	}
-
-	public ByteBuffer GetBuffer(int offset, int length) {
+	public ByteBuffer getBuffer(int offset, int length) {
 		int chunkNumber = offset / chunkSize;
 		int chunkOffset = offset % chunkSize;
 
 		int firstChunkSize = Math.min(length, chunkSize - chunkOffset);
 		int secondChunkSize = length - firstChunkSize;
 
-		ByteBuffer buffer = GetChunkAsByteBuffer(chunkNumber);
+		ByteBuffer buffer = getChunkAsByteBuffer(chunkNumber);
 		buffer.position(chunkOffset);
 
-		ByteBuffer buffer2 = GetChunkAsByteBuffer(chunkNumber + 1);
+		ByteBuffer buffer2 = getChunkAsByteBuffer(chunkNumber + 1);
 
 		ByteBuffer b = ByteBuffer.allocate(length);
+		b.order(ByteOrder.LITTLE_ENDIAN);
 		b.put(buffer);
 		for (int i = 0; i < secondChunkSize; ++i) {
 			b.put(buffer2.get(i));
 		}
-
+		b.position(0);
 		return b;
 	}
 
-	public ShortBuffer GetShortBuffer(int offset, int length) {
-		int chunkNumber = offset / chunkSize;
-		int chunkOffset = offset % chunkSize;
-
-		int firstChunkSize = Math.min(length, chunkSize - chunkOffset);
-		int secondChunkSize = length - firstChunkSize;
-
-		ShortBuffer buffer = GetChunkAsShortBuffer(chunkNumber);
-		buffer.position(chunkOffset);
-
-		ShortBuffer buffer2 = GetChunkAsShortBuffer(chunkNumber + 1);
-
-		ShortBuffer b = ShortBuffer.allocate(length);
-		b.put(buffer);
-		for (int i = 0; i < secondChunkSize; ++i) {
-			b.put(buffer2.get(i));
-		}
-
-		return b;
-	}
-
-	void append(byte[] buffer, int bufferLength) {
+	public void append(byte[] buffer, int bufferLength) {
 		int remaining = bufferLength;
 		int bufferOffset = 0;
 
@@ -126,7 +96,7 @@ public class MemoryMapManager implements Closeable {
 			int chunkNumber = tail / chunkSize;
 			int chunkOffset = tail % chunkSize;
 
-			ByteBuffer chunk = GetChunkAsByteBuffer(chunkNumber);
+			ByteBuffer chunk = getChunkAsByteBuffer(chunkNumber);
 			chunk.position(chunkOffset);
 
 			int copySize = Math.min(remaining, chunkSize - chunkOffset);
@@ -138,18 +108,30 @@ public class MemoryMapManager implements Closeable {
 		}
 	}
 
-	void append(short[] buffer, int bufferLength) {
-		ByteBuffer byteBuf = ByteBuffer.allocate(2 * bufferLength);
-		byteBuf.order(ByteOrder.LITTLE_ENDIAN);
-		byteBuf.asShortBuffer().put(buffer, 0, bufferLength);
-		this.append(byteBuf.array(), bufferLength * 2);
+	public void append(short[] buffer, int bufferLength) {
+	  int remaining = bufferLength * 2;
+	  int bufferOffset = 0;
+	  while (remaining > 0) {
+	    int chunkNumber = tail / chunkSize;
+      int chunkOffset = tail % chunkSize;
+      
+      ByteBuffer chunk = getChunkAsByteBuffer(chunkNumber);
+      chunk.position(chunkOffset);
+      int copySize = Math.min(remaining, chunkSize - chunkOffset);
+      ShortBuffer chunkShort  = chunk.asShortBuffer();
+      chunkShort.put(buffer, bufferOffset/2, copySize / 2);
+      
+      remaining -= copySize;
+      bufferOffset += copySize;
+      tail += copySize;
+	  }
 	}
 
 	public void append(byte c) {
 		int chunkNumber = tail / chunkSize;
 		int chunkOffset = tail % chunkSize;
 
-		ByteBuffer chunk = GetChunkAsByteBuffer(chunkNumber);
+		ByteBuffer chunk = getChunkAsByteBuffer(chunkNumber);
 		chunk.position(chunkOffset);
 
 		chunk.put(c);
@@ -242,10 +224,10 @@ public class MemoryMapManager implements Closeable {
 	 * second_chunk_size); }
 	 */
 
-	private ByteBuffer GetChunkAsByteBuffer(int chunkNumber) {
+	private ByteBuffer getChunkAsByteBuffer(int chunkNumber) {
 		while (chunkNumber >= mappings.size()) {
 			try {
-				CreateMapping();
+				createMapping();
 			} catch (IOException e) {
 				throw new RuntimeException("unexpected error");
 			}
@@ -254,20 +236,7 @@ public class MemoryMapManager implements Closeable {
 		return mappings.get(chunkNumber);
 	}
 
-	private ShortBuffer GetChunkAsShortBuffer(int chunkNumber) {
-		while (chunkNumber >= mappings.size()) {
-			try {
-				CreateMapping();
-			} catch (IOException e) {
-				throw new RuntimeException("unexpected error");
-			}
-		}
-		ByteBuffer byteBuf = mappings.get(chunkNumber);
-		byteBuf.position(0);
-		return byteBuf.asShortBuffer();
-	}
-
-	private void CreateMapping() throws FileNotFoundException, IOException {
+	private void createMapping() throws FileNotFoundException, IOException {
 		RandomAccessFile newFile = new RandomAccessFile(File.createTempFile(filenamePattern, null, directory.toFile()),
 				"rw");
 		files.add(newFile);
@@ -277,4 +246,8 @@ public class MemoryMapManager implements Closeable {
 		newMapping.order(ByteOrder.LITTLE_ENDIAN);
 		mappings.add(newMapping);
 	}
+
+  public int getChunkSize() {
+    return chunkSize;
+  }
 }

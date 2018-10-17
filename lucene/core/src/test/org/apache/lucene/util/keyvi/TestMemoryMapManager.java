@@ -31,15 +31,15 @@ public class TestMemoryMapManager extends LuceneTestCase {
 		int chunkSize = 1024 * 1024;
 		Path temporaryDirectory = Files.createTempDirectory("dictionary-fsa-unittest");
 		MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "basic test");
-		m.GetAddressAsByteBuffer(0);
-		ByteBuffer buf = m.GetAddressAsByteBuffer(2 * chunkSize);
+		m.getAddressAsByteBuffer(0);
+		ByteBuffer buf = m.getAddressAsByteBuffer(2 * chunkSize);
 
 		for (int i = 0; i < chunkSize; ++i) {
 			buf.put(i, (byte) 42);
 		}
 		assertEquals(buf.get(42), 42);
 
-		ByteBuffer buf2 = m.GetAddressAsByteBuffer(chunkSize);
+		ByteBuffer buf2 = m.getAddressAsByteBuffer(chunkSize);
 		for (int i = 0; i < chunkSize - 1; ++i) {
 			buf2.put(i, (byte) 24);
 		}
@@ -49,51 +49,26 @@ public class TestMemoryMapManager extends LuceneTestCase {
 
 		// TODO: fix: Files.deleteIfExists(temporaryDirectory);
 	}
-	/*
-	 * BOOST_AUTO_TEST_CASE( GetAddressOverflowCheck ) { size_t chunkSize = 1024
-	 * * 1024;
-	 * 
-	 * boost::filesystem::path path = boost::filesystem::temp_directory_path();
-	 * path /= boost::filesystem::unique_path(
-	 * "dictionary-fsa-unittest-%%%%-%%%%-%%%%-%%%%");
-	 * boost::filesystem::create_directory(path); MemoryMapManager m(chunkSize,
-	 * path, "basic test");
-	 * 
-	 * m.GetAddress(0);
-	 * 
-	 * BOOST_CHECK(m.GetAddressQuickTestOk(chunkSize -1, 1));
-	 * BOOST_CHECK(m.GetAddressQuickTestOk(chunkSize -3, 2));
-	 * BOOST_CHECK(m.GetAddressQuickTestOk(chunkSize -5, 5));
-	 * 
-	 * BOOST_CHECK(!m.GetAddressQuickTestOk(chunkSize -1, 2));
-	 * BOOST_CHECK(!m.GetAddressQuickTestOk(chunkSize -1, 3));
-	 * BOOST_CHECK(!m.GetAddressQuickTestOk(chunkSize -1, 4));
-	 * BOOST_CHECK(!m.GetAddressQuickTestOk(chunkSize -1, 5));
-	 * 
-	 * char* testptr = (char*) m.GetAddress(chunkSize-1);
-	 * 
-	 * boost::filesystem::remove_all(path); }
-	 */
 
 	public void testGetBuffer() throws IOException {
 		int chunkSize = 1024 * 1024;
 		Path temporaryDirectory = Files.createTempDirectory("dictionary-fsa-unittest");
 		MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "basic test");
 
-		m.GetAddressAsByteBuffer(0);
-		ByteBuffer buf = m.GetAddressAsByteBuffer(chunkSize - 2);
+		m.getAddressAsByteBuffer(0);
+		ByteBuffer buf = m.getAddressAsByteBuffer(chunkSize - 2);
 		buf.put((byte) 104);
 
-		buf = m.GetAddressAsByteBuffer(chunkSize - 1);
+		buf = m.getAddressAsByteBuffer(chunkSize - 1);
 		buf.put((byte) 101);
 
-		buf = m.GetAddressAsByteBuffer(chunkSize);
+		buf = m.getAddressAsByteBuffer(chunkSize);
 		buf.put((byte) 108);
 
-		buf = m.GetAddressAsByteBuffer(chunkSize + 1);
+		buf = m.getAddressAsByteBuffer(chunkSize + 1);
 		buf.put((byte) 109);
 
-		buf = m.GetAddressAsByteBuffer(chunkSize + 2);
+		buf = m.getAddressAsByteBuffer(chunkSize + 2);
 		buf.put((byte) 111);
 
 	}
@@ -103,7 +78,7 @@ public class TestMemoryMapManager extends LuceneTestCase {
 		Path temporaryDirectory = Files.createTempDirectory("dictionary-fsa-unittest");
 		MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "basic test");
 
-		m.GetAddressAsByteBuffer(0);
+		m.getAddressAsByteBuffer(0);
 
 		byte[] buffer = new byte[16384];
 		Arrays.fill(buffer, 0, 4096, (byte) 121);
@@ -126,19 +101,19 @@ public class TestMemoryMapManager extends LuceneTestCase {
 
 		m.append(buffer, buffer.length);
 		
-		assertEquals(122, m.GetAddressAsByteBuffer(8888).get());
-		assertEquals(97, m.GetAddressAsByteBuffer(9503).get());
-		assertEquals(122, m.GetAddressAsByteBuffer(12004).get());
-		assertEquals(101, m.GetAddressAsByteBuffer(14000).get());
-		assertEquals(104, m.GetAddressAsByteBuffer(16383).get());
+		assertEquals(122, m.getAddressAsByteBuffer(8888).get());
+		assertEquals(97, m.getAddressAsByteBuffer(9503).get());
+		assertEquals(122, m.getAddressAsByteBuffer(12004).get());
+		assertEquals(101, m.getAddressAsByteBuffer(14000).get());
+		assertEquals(104, m.getAddressAsByteBuffer(16383).get());
 	}
 
 	public void testAppendChunkOverflow() throws IOException {
 		int chunkSize = 4096;
 		Path temporaryDirectory = Files.createTempDirectory("dictionary-fsa-unittest");
-		MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "basic test");
+		MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "chunk test");
 
-		m.GetAddressAsByteBuffer(0);
+		m.getAddressAsByteBuffer(0);
 
 		byte[] buffer = new byte[1000];
 		Arrays.fill(buffer, 0, 1000, (byte) 122);
@@ -154,21 +129,51 @@ public class TestMemoryMapManager extends LuceneTestCase {
 		Arrays.fill(buffer, 0, 1000, (byte) 118);
 		m.append(buffer, buffer.length);
 		
-		assertEquals(122, m.GetAddressAsByteBuffer(999).get());
-		assertEquals(121, m.GetAddressAsByteBuffer(1567).get());
-		assertEquals(123, m.GetAddressAsByteBuffer(2356).get());
-		assertEquals(120, m.GetAddressAsByteBuffer(3333).get());
-		assertEquals(119, m.GetAddressAsByteBuffer(4444).get());
-		assertEquals(118, m.GetAddressAsByteBuffer(5555).get());
+		assertEquals(122, m.getAddressAsByteBuffer(999).get());
+		assertEquals(121, m.getAddressAsByteBuffer(1567).get());
+		assertEquals(123, m.getAddressAsByteBuffer(2356).get());
+		assertEquals(120, m.getAddressAsByteBuffer(3333).get());
+		assertEquals(119, m.getAddressAsByteBuffer(4444).get());
+		assertEquals(118, m.getAddressAsByteBuffer(5555).get());
 		assertEquals(6000, m.size());
 	}
 
+	 public void testAppendChunkOverflowShorts() throws IOException {
+	    int chunkSize = 4096;
+	    Path temporaryDirectory = Files.createTempDirectory("dictionary-fsa-unittest");
+	    MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "chunk test");
+
+	    m.getAddressAsByteBuffer(0);
+
+	    short[] buffer = new short[1000];
+	    Arrays.fill(buffer, 0, 1000, (short) -10000);
+	    m.append(buffer, buffer.length);    
+	    Arrays.fill(buffer, 0, 1000, (short) 32000);
+	    m.append(buffer, buffer.length);
+	    Arrays.fill(buffer, 0, 1000, (short) 123);
+	    m.append(buffer, buffer.length);
+	    Arrays.fill(buffer, 0, 1000, (short) 15000);
+	    m.append(buffer, buffer.length);
+	    Arrays.fill(buffer, 0, 1000, (short) 119);
+	    m.append(buffer, buffer.length);
+	    Arrays.fill(buffer, 0, 1000, (short) -15001);
+	    m.append(buffer, buffer.length);
+	    
+	    assertEquals(-10000, m.getAddressAsByteBuffer(999*2).asShortBuffer().get());
+	    assertEquals(32000, m.getAddressAsByteBuffer(1567*2).asShortBuffer().get());
+	    assertEquals(123, m.getAddressAsByteBuffer(2356*2).asShortBuffer().get());
+	    assertEquals(15000, m.getAddressAsByteBuffer(3333*2).asShortBuffer().get());
+	    assertEquals(119, m.getAddressAsByteBuffer(4444*2).asShortBuffer().get());
+	    assertEquals(-15001, m.getAddressAsByteBuffer(5555*2).asShortBuffer().get());
+	    assertEquals(12000, m.size());
+	  }
+	
 	public void testChunkBehindTail() throws IOException {
 		int chunkSize = 4096;
 		Path temporaryDirectory = Files.createTempDirectory("dictionary-fsa-unittest");
 		MemoryMapManager m = new MemoryMapManager(chunkSize, temporaryDirectory, "basic test");
 
-		m.GetAddressAsByteBuffer(0);
+		m.getAddressAsByteBuffer(0);
 
 
 		byte[] buffer = new byte[1024];
@@ -187,7 +192,7 @@ public class TestMemoryMapManager extends LuceneTestCase {
 		assertEquals(4095, m.size());
 		
 		// force a new chunk to be created, although tail does not require it
-		m.GetBuffer(4094, 10);
+		m.getBuffer(4094, 10);
 
 		/*
 		  auto filename = path;
