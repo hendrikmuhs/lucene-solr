@@ -21,9 +21,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-import org.apache.lucene.store.DataOutput;
-import org.apache.lucene.store.OutputStreamDataOutput;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
+import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.LuceneTestCase;
+
+import static java.nio.charset.StandardCharsets.*;
 
 public class TestGenerator extends LuceneTestCase {
 
@@ -71,14 +75,32 @@ public class TestGenerator extends LuceneTestCase {
 
     g.closeFeeding();
 
-    File file = new File("/tmp/t-l.kv");
-    FileOutputStream stream = new FileOutputStream(file);
-    DataOutput out = new OutputStreamDataOutput(stream);
-    
-    
+    Directory dir = newDirectory();
+    IndexOutput out = dir.createOutput("keyvi", IOContext.DEFAULT);
     g.write(out);
-    g.close();
+    out.close();
+    IndexInput in = dir.openInput("keyvi", IOContext.DEFAULT);
+
+    Automata automata = new Automata (in);
+
+    assertEquals(5, automata.getNumberOfKeys());
+    int startState = automata.getStartState();
+    byte [] k = "aaaa".getBytes(UTF_8);
+
+    int state = automata.tryWalkTransition(startState, k[0]);
+    assertTrue(state > 0);
+
+    state = automata.tryWalkTransition(state, k[1]);
+    assertTrue(state > 0);
+
+    state = automata.tryWalkTransition(state, k[2]);
+    assertTrue(state > 0);
+
+    state = automata.tryWalkTransition(state, k[3]);
+    assertTrue(state > 0);
+
+    assertTrue(automata.isFinalState(state));
+    in.close();
+    dir.close();
   }
-  
-  
 }
